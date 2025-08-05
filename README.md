@@ -89,6 +89,22 @@ It will only dump the objects necessary for DTCs (= diagnostic trouble codes).
 > python dumpDTC.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
 > ```
 
+### `dumpFreezeFrames`
+
+This script will dump "Freeze Frame definitions".
+It will only dump the objects necessary for DTC extended data records.
+
+> [!TIP]
+> ```powershell
+> python dumpFreezeFrames.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpFreezeFrames.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpFreezeFrames.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+
 ### `dumpECUVariantPatterns`
 
 This script will dump "ECU-VARIANT matching patterns", necessary for the "variant identification" procedure (selecting the appropriate file for an ECU).

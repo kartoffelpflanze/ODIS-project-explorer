@@ -354,7 +354,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             
             # The loader has already checked that the ENCODING attribute is valid for the BASE-DATA-TYPE,
             # but it is checked here again against the documentation
-            if ((output_object['encoding'] == 'BCD-UP'     and output_object['coded_base_data_type'] not in ['A_BYTEFIELD'                          ]) or
+            if ((output_object['encoding'] == 'BCD-UP'     and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD'              ]) or
                 (output_object['encoding'] == 'BCD-P'      and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD'              ]) or
                 (output_object['encoding'] == '2C'         and output_object['coded_base_data_type'] not in ['A_INT32'                              ]) or
                 (output_object['encoding'] == '1C'         and output_object['coded_base_data_type'] not in ['A_INT32'                              ]) or
@@ -1284,6 +1284,18 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 dtc_output_object['level'] = dtc['level']
                 
                 output_object['dtc_list'].append(dtc_output_object)
+        
+        # For dumpFreezeFrames.py
+        case 'MCD_DB_PARAMETER_TABLE_KEY':
+            if dop['short_name'] in ['Param_RecorDataIdent', 'Param_DataRecorIdent', 'Param_StandFreezDynam0x71Class']:
+                output_object = {'type': 'MWB-DID', 'byte_position': dop['byte_position']}
+            else:
+                raise RuntimeError('Unknown Table Key: {}'.format(dop['short_name']))
+        case 'MCD_DB_PARAMETER_TABLESTRUCT':
+            if dop['key_param_short_name'] in ['Param_RecorDataIdent', 'Param_DataRecorIdent', 'Param_StandFreezDynam0x71Class']:
+                output_object = {'type': 'MWB', 'byte_position': dop['byte_position']}
+            else:
+                raise RuntimeError('Unknown Table Struct key: {}'.format(dop['short_name']))
         
         case _:
             object_printer.print_indented(0, '') 
