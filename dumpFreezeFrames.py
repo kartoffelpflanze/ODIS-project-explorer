@@ -75,14 +75,15 @@ def dump_freezeframes_for_base_variant(object_loader, protocol_layer_data_list, 
             else:
                 ecu_variant_layer_data = get_ecu_variant_layer_data(object_loader, project_folder_path, ecu_variant_map[ecu_variant_name])
             
+            # Search for the Freeze Frame Multiplexer
             freeze_frame_dop = None
             for dop_ref_entry in ecu_variant_layer_data['dop_refs_map']:
                 if dop_ref_entry['map_key'] == 'MUX_DTCExtenDataRecor':
                     freeze_frame_dop = object_loader.load_object_by_reference(project_folder_path, dop_ref_entry['reference'])
                     break
             
+            # If it's not found, there is nothing more to do
             if freeze_frame_dop is None:
-                #print('Failed to find DOP reference with name MUX_DTCExtenDataRecor')
                 object_printer.print_indented(debug_info_indentation_level + 1, 'Has no special Freeze Frames')
                 continue
             
@@ -93,39 +94,46 @@ def dump_freezeframes_for_base_variant(object_loader, protocol_layer_data_list, 
             # These objects will be used (in this order) for solving references which don't specify a PoolID
             layer_data_objects = [ecu_variant_layer_data, base_variant_layer_data] + protocol_layer_data_list
             
+            # The object must be a MUX  
+            if freeze_frame_dop['#OBJECT_TYPE'] != 'MCD_DB_PARAMETER_MULTIPLEXER':
+                raise RuntimeError('Freeze Frame DOP must be MUX, not {}'.format(freeze_frame_dop['#OBJECT_TYPE']))
+            
+            # The SWITCH-KEY should start at the edge of the first byte
+            if freeze_frame_dop['switch_key']['bit_position'] != 0 or freeze_frame_dop['switch_key']['byte_position'] != 0:
+                raise RuntimeError('Expected BYTE- and BIT-POSITION of Freeze Frame MUX SWITCH-KEY to be 0, not {} and {}'.format(freeze_frame_dop['switch_key']['bit_position'], freeze_frame_dop['switch_key']['byte_position']))
+            
+            # The SWITCH-KEY should take 8 bits
+            mux_switch_key_dop = object_loader.load_object_by_reference(project_folder_path, freeze_frame_dop['switch_key']['dop_base_ref'])
+            if mux_switch_key_dop['diag_coded_type']['bit_length'] != 8:
+                raise RuntimeError('Expected Freeze Frame MUX SWITCH-KEY to take 8 bytes, not {}'.format(mux_switch_key_dop['diag_coded_type']['bit_length']))
+            
             # Open the output file and dump the Freeze Frames
             with open(ecu_variant_output_file_path, 'w', encoding='utf-8') as ecu_variant_output_file:
-                if freeze_frame_dop['#OBJECT_TYPE'] != 'MCD_DB_PARAMETER_MULTIPLEXER':
-                    raise RuntimeError('Freeze Frame DOP must be MUX, not {}'.format(MUX_DTCExtenDataRecor['#OBJECT_TYPE']))
-                
-                if freeze_frame_dop['switch_key']['bit_position'] != 0 or freeze_frame_dop['switch_key']['byte_position'] != 0:
-                    raise RuntimeError('Expected BYTE- and BIT-POSITION of Freeze Frame MUX SWITCH-KEY to be 0, not {} and {}'.format(freeze_frame_dop['switch_key']['bit_position'], freeze_frame_dop['switch_key']['byte_position']))
-                
-                mux_switch_key_dop = object_loader.load_object_by_reference(project_folder_path, freeze_frame_dop['switch_key']['dop_base_ref'])
-                if mux_switch_key_dop['diag_coded_type']['bit_length'] != 8:
-                    raise RuntimeError('Expected Freeze Frame MUX SWITCH-KEY to take 8 bytes, not {}'.format(mux_switch_key_dop['diag_coded_type']['bit_length']))
-                
+                # Go through each CASE of the MUX
                 for case in freeze_frame_dop['cases']:
+                    # Both CASE limits should be CLOSED
                     if case['lower_limit']['limit_type'] != 'eLIMIT_CLOSED' or case['upper_limit']['limit_type'] != 'eLIMIT_CLOSED':
                         raise RuntimeError('Expected Freeze Frame MUX CASE LOWER- and UPPER-LIMIT types to be closed, not {} and {}'.format(case['lower_limit']['limit_type'] != 'eLIMIT_CLOSED', case['upper_limit']['limit_type'] != 'eLIMIT_CLOSED'))
                     
+                    # Load the structure referenced by the CASE
                     mux_case_structure = object_loader.load_object_by_reference(project_folder_path, case['structure_dop_ref'])
                     
-                    # Parse the multiplexer case structure
+                    # Parse the MUX CASE structure
                     parsed_freeze_frame_mux_case_struct = parse_dop(object_loader, layer_data_objects, project_folder_path, mux_case_structure)
                     if parsed_freeze_frame_mux_case_struct['type'] != 'STRUCTURE':
                         raise RuntimeError('Freeze Frame MUX CASE DOP shoud be STRUCTURE, not {}'.format(parsed_freeze_frame_mux_case_struct['type']))
                     
+                    # In at least one project, an ECU-VARIANT has the CASE's name and value swapped, so the value appears as a string... just keep it as a string
                     try:
                         lower_limit = int(case['lower_limit']['mcd_value']['value'])
                     except ValueError:
                         lower_limit = case['lower_limit']['mcd_value']['value']
-                    
                     try:
                         upper_limit = int(case['upper_limit']['mcd_value']['value'])
                     except ValueError:
                         upper_limit = case['upper_limit']['mcd_value']['value']
                     
+                    # This object will be written to the output file
                     obj = {
                         'description': case['description'],
                         'lower_limit': lower_limit,
