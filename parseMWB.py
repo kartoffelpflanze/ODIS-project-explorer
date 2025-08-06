@@ -8,7 +8,7 @@ from classes.PblRecordManager import PblRecordManager
 from classes.ObjectLoader import ObjectLoader
 from classes.StringStorage import StringStorage
 from classes.LongNameTranslation import LongNameTranslation
-from dumpMWB import pbl_record_manager, get_protocol_layer_data_list, get_ecu_variant_map, get_ecu_variant_layer_data, get_mwb_map, get_mwb_table, get_mwb_name_and_table_row_parameter_by_did, get_mwb_structure, parse_dop
+from dumpMWB import pbl_record_manager, get_protocol_layer_data_list, get_ecu_variant_map, get_ecu_variant_layer_data, get_mwb_keys_and_table, get_mwb_name_and_table_row_parameter_by_did, get_mwb_structure, parse_dop
 
 
 # Convert a bytearray to a formatted string (2 HEX digits per byte, separated by spaces)
@@ -1460,15 +1460,19 @@ def app_parseMWB(object_loader, long_name_translation, project_folder_path, base
     
     # Load the layer data for the ECU-VARIANT
     ecu_variant_layer_data = get_ecu_variant_layer_data(object_loader, project_folder_path, ecu_variant_reference)
+                
+    # These objects will be used (in this order) for solving references which don't specify a PoolID
+    layer_data_objects = [ecu_variant_layer_data, base_variant_layer_data] + protocol_layer_data_list
     
-    # Get a map of available MWBs (each DID resolves to a dictionary with a LONG-NAME and LONG-NAME-ID)
-    mwb_map_result = get_mwb_map(object_loader, project_folder_path, ecu_variant_layer_data)
+    # Get a map of available MWBs
+    get_mwb_keys_and_table_result = get_mwb_keys_and_table(object_loader, layer_data_objects, project_folder_path, ecu_variant_layer_data)
     
     # If there are no MWBs, there is nothing to do
-    if mwb_map_result is None:
+    if get_mwb_keys_and_table_result is None:
         raise RuntimeError('ECU-VARIANT {} contains no MWBs'.format(desired_ecu_variant))
     else:
-        mwb_map, response_parameter_table = mwb_map_result
+        # Unpack the result
+        mwb_keys, mwb_table = get_mwb_keys_and_table_result
     
     # If the DID was provided as a string, convert it to an integer, assuming it's in HEX format
     if isinstance(desired_did, str):
@@ -1477,42 +1481,29 @@ def app_parseMWB(object_loader, long_name_translation, project_folder_path, base
         desired_did = int(desired_did)
     
     # If the requested DID does not exist, print the list of available DIDs
-    if desired_did not in mwb_map:
+    if desired_did not in mwb_keys:
         object_printer.print_indented(0, 'Available DIDs:')
-        for did in sorted(mwb_map):
+        for did in sorted(mwb_keys):
             object_printer.print_indented(1, '{:04X}'.format(did))
         object_printer.print_indented(0, '')
         raise RuntimeError('DID {:04X} does not exist'.format(desired_did))
     
-    # Get the table of MWBs (a MWB LONG-NAME resolves to the corresponding table row's reference)
-    mwb_table = get_mwb_table(response_parameter_table)
-    
     # Get the request MWB's name and corresponding table row parameter
-    table_row_result = get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_table, mwb_map, desired_did)
+    table_row_result = get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_keys, mwb_table, desired_did)
     if table_row_result is None:
         raise RuntimeError('Failed to find MWB table row')
     else:
+        # Unpack the result
         mwb_long_name, mwb_long_name_id, mwb_table_row_parameter = table_row_result
     
     # Get the corresponding STRUCTURE parameter of the requested MWB
     mwb_structure = get_mwb_structure(object_loader, project_folder_path, mwb_table_row_parameter)
-                
-    # These objects will be used (in this order) for solving references which don't specify a PoolID
-    layer_data_objects = [ecu_variant_layer_data, base_variant_layer_data] + protocol_layer_data_list
-    
-    # Parse the MWB STRUCTURE
-    parsed_mwb_structure = parse_dop(object_loader, layer_data_objects, project_folder_path, mwb_structure)
-    
-    # The top level is simply a STRUCTURE, so, being a COMPLEX-DOP, must start at byte edge (BIT-POSITION = 0)
-    # It should probably start at the first byte too
-    if mwb_table_row_parameter['byte_position'] != 0 or mwb_table_row_parameter['bit_position'] != 0:
-        raise RuntimeError('Expected BYTE- and BIT-POSITION 0 for top MWB level, not {} and {}'.format(mwb_table_row_parameter['byte_position'], mwb_table_row_parameter['bit_position']))
     
     # Convert the response string to a bytearray
     response_bytes = bytearray.fromhex(response)
     
     # Parse the response and display it
-    parsed_mwb_response = parse_mwb_response(mwb_long_name_id, mwb_long_name, parsed_mwb_structure, response_bytes)
+    parsed_mwb_response = parse_mwb_response(mwb_long_name_id, mwb_long_name, mwb_structure, response_bytes)
     processed_mwb_response = process_parsed_mwb_response(parsed_mwb_response)
     dump_processed_mwb_response(processed_mwb_response)
 

@@ -80,7 +80,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
     # Parse the object, depending on its type
     match dop['#OBJECT_TYPE']:
         # Parameter: MCD-2D V2.2 - 7.3.5.4
-        case 'MCD_DB_PARAMETER_SIMPLE':
+        case 'MCD_DB_PARAMETER' | 'MCD_DB_PARAMETER_SIMPLE':
             output_object['type'] = 'PARAMETER'
             
             # Get the LONG-NAME, LONG-NAME-ID and DESCRIPTION of the parameter
@@ -1285,18 +1285,105 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 
                 output_object['dtc_list'].append(dtc_output_object)
         
-        # For dumpFreezeFrames.py
         case 'MCD_DB_PARAMETER_TABLE_KEY':
-            if dop['short_name'] in ['Param_RecorDataIdent', 'Param_DataRecorIdent', 'Param_StandFreezDynam0x71Class']:
-                output_object = {'type': 'MWB-DID', 'byte_position': dop['byte_position']}
-            else:
-                raise RuntimeError('Unknown Table Key: {}'.format(dop['short_name']))
-        case 'MCD_DB_PARAMETER_TABLESTRUCT':
-            if dop['key_param_short_name'] in ['Param_RecorDataIdent', 'Param_DataRecorIdent', 'Param_StandFreezDynam0x71Class']:
-                output_object = {'type': 'MWB', 'byte_position': dop['byte_position']}
-            else:
-                raise RuntimeError('Unknown Table Struct key: {}'.format(dop['short_name']))
+            output_object['type'] = 'TABLE-KEY'
+            
+            # The TABLE-KEY is referenced by the TABLE-STRUCT by SHORT-NAME
+            output_object['name'] = dop['short_name']
+            
+            # Get the parameter's BYTE-POSITION and BIT-POSITION
+            output_object['byte_position'] = dop['byte_position']
+            output_object['bit_position'] = dop['bit_position']
+            
+            # Load the TABLE by its reference
+            table = object_loader.load_object_by_reference(project_folder_path, dop['table_ref'])
+            if table['#OBJECT_TYPE'] != 'MCD_DB_TABLE':
+                raise RuntimeError('Expected TABLE, not {}'.format(table['#OBJECT_TYPE']))
+            
+            # Load and parse the DOP that extracts the TABLE-KEY's value
+            table_key_dop = object_loader.load_object_by_reference(project_folder_path, table['dop_simple_ref'])
+            table_key_parsed_dop = parse_dop(object_loader, layer_data_objects, project_folder_path, table_key_dop)
+            
+            # I expect a table key to always convert a simple unsigned integer to a unicode string
+            if table_key_parsed_dop['coded_base_data_type'] != 'A_UINT32':
+                raise RuntimeError('Expected coded table key to be A_UINT32, not {}'.format(table_key_parsed_dop['coded_base_data_type']))
+            if table_key_parsed_dop['physical_base_data_type'] != 'A_UNICODE2STRING':
+                raise RuntimeError('Expected physical table key to be A_UNICODE2STRING, not {}'.format(table_key_parsed_dop['physical_base_data_type']))
+            if table_key_parsed_dop['diag_coded_type'] != 'STANDARD-LENGTH-TYPE':
+                raise RuntimeError('Expected table key to be STANDARD-LENGTH-TYPE, not {}'.format(table_key_parsed_dop['diag_coded_type']))
+            if table_key_parsed_dop['encoding'] != 'NONE':
+                raise RuntimeError('Expected table key encoding to be NONE, not {}'.format(table_key_parsed_dop['encoding']))
+            if table_key_parsed_dop['compu_category'] != 'TEXTTABLE':
+                raise RuntimeError('Expected table key to be TEXTTABLE, not {}'.format(table_key_parsed_dop['compu_category']))
+            
+            # This data type is currently only used for MWBs and Freeze Frames, which will take either 1 or 2 bytes
+            # If present, a BIT-MASK should only really have all bits set, so it doesn't mask at all
+            match table_key_parsed_dop['bit_length']:
+                case 8:
+                    if table_key_parsed_dop['bit_mask'] is not None and table_key_parsed_dop['bit_mask'] != bytearray.fromhex('FF'):
+                        raise RuntimeError('Unexpected BIT-MASK for table key: {}'.format(table_key_parsed_dop['bit_mask']))
+                case 16:
+                    if table_key_parsed_dop['bit_mask'] is not None and table_key_parsed_dop['bit_mask'] != bytearray.fromhex('FFFF'):
+                        raise RuntimeError('Unexpected BIT-MASK for table key: {}'.format(table_key_parsed_dop['bit_mask']))
+                case _:
+                    raise RuntimeError('Unexpected BIT-LENGTH for table key: {}'.format(table_key_parsed_dop['bit_length']))
+            
+            # Store only the fields of the DOP that can be different
+            output_object['bit_length'] = table_key_parsed_dop['bit_length']
+            output_object['endianness'] = table_key_parsed_dop['endianness']
+            
+            # From the COMPU-SCALEs, only store the fields needed to use the values as keys in the table
+            output_object['keys'] = []
+            for compu_scale in table_key_parsed_dop['compu_scales']:
+                if compu_scale['lower_limit'] != compu_scale['upper_limit']:
+                    raise RuntimeError('Expected table key LOWER- and UPPER-LIMIT to match, not {} and {}'.format(compu_scale['lower_limit'], compu_scale['upper_limit']))
+                
+                key_output_object = {}
+                key_output_object['key_value'] = compu_scale['lower_limit']
+                key_output_object['long_name'] = compu_scale['long_name']
+                key_output_object['long_name_id'] = compu_scale['long_name_id']
+                output_object['keys'].append(key_output_object)
         
+        case 'MCD_DB_PARAMETER_TABLESTRUCT':
+            output_object['type'] = 'TABLE-STRUCT'
+            
+            # The TABLE-STRUCT references the TABLE-KEY by SHORT-NAME
+            output_object['key_parameter_name'] = dop['key_param_short_name']
+            
+            # Get the parameter's BYTE-POSITION and BIT-POSITION
+            output_object['byte_position'] = dop['byte_position']
+            output_object['bit_position'] = dop['bit_position']
+            
+            # Load the TABLE by its reference
+            table = object_loader.load_object_by_reference(project_folder_path, dop['table_ref'])
+            if table['#OBJECT_TYPE'] != 'MCD_DB_TABLE':
+                raise RuntimeError('Expected TABLE, not {}'.format(table['#OBJECT_TYPE']))
+            
+            # Store each table row
+            output_object['table_rows'] = []
+            for table_key_map_entry in table['table_key_map']:
+                # Load the table row
+                table_entry = object_loader.load_object_by_reference(project_folder_path, table_key_map_entry['reference'])
+                if table_entry['#OBJECT_TYPE'] != 'MCD_DB_TABLE_PARAMETER':
+                    raise RuntimeError('Expected MCD_DB_TABLE_PARAMETER, not {}'.format(table_entry['#OBJECT_TYPE']))
+                
+                # Get the table row parameter
+                table_entry_parameter = table_entry['parameter']
+                if table_entry_parameter['#OBJECT_TYPE'] != 'MCD_DB_PARAMETER':
+                    raise RuntimeError('Expected MCD_DB_PARAMETER, not {}'.format(table_entry_parameter['#OBJECT_TYPE']))
+                
+                # Parse the table row parameter
+                table_row_output_object = parse_dop(object_loader, layer_data_objects, project_folder_path, table_entry_parameter)
+                
+                # The LONG-NAME of the parsed object should be the same as the key from the map
+                # So, the TABLE-KEY's (physical) value will be searched in the LONG-NAME of each table row
+                if table_row_output_object['long_name'] != table_key_map_entry['map_key']:
+                    raise RuntimeError('Expected DOP name to match table key, not {} and {}'.format(table_row_output_object['long_name'], table_key_map_entry['map_key']))
+                
+                # Add the row to the list
+                output_object['table_rows'].append(table_row_output_object)
+        
+        # For unknown types, display the object and raise an exception
         case _:
             object_printer.print_indented(0, '') 
             object_printer.print_object(dop, 'dop', 0)
@@ -1306,31 +1393,36 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
     return output_object
 
 
+# Get a dictionary containing all ECU-VARIANTs included in the BASE-VARIANT (where its name maps to its reference)
 def get_ecu_variant_map(base_variant_project_data):
     # Return None for BASE-VARIANTs which do not have ECU-VARIANTs defined
     if len(base_variant_project_data['ecu_variant_ref_collection']) == 0:
         return None
     
+    # Get each ECU-VARIANT referenced by the BASE-VARIANT
     ecu_variant_map = {}
-    
-    # Go through each ECU-VARIANT referenced by the BASE-VARIANT
     for ecu_variant_ref in base_variant_project_data['ecu_variant_ref_collection']:
         ecu_variant_map[ecu_variant_ref['name']] = ecu_variant_ref['reference']
-    
     return ecu_variant_map
 
 
+# Get the Layer Data object of an ECU-VARIANT
 def get_ecu_variant_layer_data(object_loader, project_folder_path, ecu_variant_reference):
+    # Split the reference into PoolID and ObjectID
     (ecu_variant_PoolID, ecu_variant_ObjectID) = ObjectLoader.decode_object_reference(ecu_variant_reference)
     
-    ecu_variant = object_loader.load_object_by_id(project_folder_path, ecu_variant_PoolID, ecu_variant_ObjectID)
+    # Load the ECU-VARIANT object
+    ecu_variant = object_loader.load_object_by_reference(project_folder_path, ecu_variant_reference)
     
+    # Get the ObjectID of the Layer Data object
     ecu_variant_layer_data_ObjectID = ecu_variant['ecu']['location_refs'][0]['reference']['access_key']['layer_data_object_id']
     
+    # Load the Layer Data object from the same pool as the ECU-VARIANT object
     return object_loader.load_object_by_id(project_folder_path, ecu_variant_PoolID, ecu_variant_layer_data_ObjectID)
 
 
-def get_mwb_map(object_loader, project_folder_path, ecu_variant_layer_data):
+# Get the table (and its keys) necessary for MWBs
+def get_mwb_keys_and_table(object_loader, layer_data_objects, project_folder_path, ecu_variant_layer_data):
     # Search for the DIAG-COMM reference with name 'DiagnServi_ReadDataByIdentMeasuValue' (might not exist)
     diag_com_ref_RDBI = None
     for diag_com_ref in ecu_variant_layer_data['diag_com_refs']:
@@ -1352,89 +1444,46 @@ def get_mwb_map(object_loader, project_folder_path, ecu_variant_layer_data):
     # Load the positive response from its reference in the service
     response = object_loader.load_object_by_reference(project_folder_path, rdbi_service['data_primitive']['diag_com_primitive']['positive_response_ref_collection'][0]['reference'])
     
-    # The response parameter with SHORT-NAME 'Param_DataRecor' must be loaded
-    # It might be the third or fourth response parameter
-    
-    # Search for the response parameter with SHORT-NAME 'Param_DataRecor'
-    data_record_response_parameter = None
+    # One parameter will be the table key (MWB-DID) and the other one will be the table structure (MWB)
+    data_record_table_key_parameter = None
+    data_record_table_struct_parameter = None
     for response_parameter in response['response_parameters']:
-        if response_parameter['short_name'] == 'Param_DataRecor':
-            data_record_response_parameter = response_parameter
-            break
+        if response_parameter['#OBJECT_TYPE'] == 'MCD_DB_PARAMETER_TABLE_KEY':
+            data_record_table_key_parameter = response_parameter
+        if response_parameter['#OBJECT_TYPE'] == 'MCD_DB_PARAMETER_TABLESTRUCT':
+            data_record_table_struct_parameter = response_parameter
     
-    # The response parameter must have been found
-    if data_record_response_parameter is None:
-        raise RuntimeError('Could not find Param_DataRecor response parameter')
+    # The response parameters must have been found
+    if data_record_table_key_parameter is None:
+        raise RuntimeError('Could not find table key response parameter')
+    if data_record_table_struct_parameter is None:
+        raise RuntimeError('Could not find table struct response parameter')
     
-    # Load the table of the response parameter from its reference
-    response_parameter_table = object_loader.load_object_by_reference(project_folder_path, data_record_response_parameter['table_ref'])
+    # In a service 0x22 response, the DID is expected at BYTE-POSITION 1 and the MWB at BYTE-POSITION 3 (both at byte edge)
+    if data_record_table_key_parameter['byte_position'] != 1 or data_record_table_key_parameter['bit_position'] != 0:
+        raise RuntimeError('Expected BYTE-POSITION 1 and BIT-POSITION 0 for MWB table key, not {} and {}'.format(data_record_table_key_parameter['byte_position'], data_record_table_key_parameter['bit_position']))
+    if data_record_table_struct_parameter['byte_position'] != 3 or data_record_table_struct_parameter['bit_position'] != 0:
+        raise RuntimeError('Expected BYTE-POSITION 3 and BIT-POSITION 0 for MWB table struct, not {} and {}'.format(data_record_table_struct_parameter['byte_position'], data_record_table_struct_parameter['bit_position']))
     
-    # Load the DOP from its reference, whose COMPU-SCALEs contain the correlation between RDBI DIDs and measurement names
-    did_table = object_loader.load_object_by_reference(project_folder_path, response_parameter_table['dop_simple_ref'])
+    # Parse the table keys and table structure
+    parsed_table_keys = parse_dop(object_loader, layer_data_objects, project_folder_path, data_record_table_key_parameter)
+    parsed_table_struct = parse_dop(object_loader, layer_data_objects, project_folder_path, data_record_table_struct_parameter)
     
-    mwb_map = {}
-    for compu_scale in did_table['compu_method']['compu_internal_to_phys']['compu_scales']:
-        mwb_map[compu_scale['compu_const_as_coded_value']['value']] = {'long_name': compu_scale['compu_const']['value'], 'long_name_id': compu_scale['long_name_id']}
-    
-    return (mwb_map, response_parameter_table)
+    # Convert the keys to a dictionary where a DID resolves to a LONG-NAME and LONG-NAME-ID
+    mwb_keys = {x['key_value']: {'long_name': x['long_name'], 'long_name_id': x['long_name_id']} for x in parsed_table_keys['keys']}
+    # Convert the structure to a dictionary where a LONG-NAME resolves to a STRUCTURE
+    mwb_table = {x['long_name']: x for x in parsed_table_struct['table_rows']}
+    return (mwb_keys, mwb_table)
 
 
-def get_mwb_table(response_parameter_table):
-    # Return the map of the table's keys as a dictionary in which the MWB's LONG-NAME resolves to the table row's reference
-    return {item['map_key']: item['reference'] for item in response_parameter_table['table_key_map']}
-
-
-def get_mwb_table_parameter(object_loader, project_folder_path, mwb_table, mwb_table_key, mwb_long_name_to_did_map):
-    # Normally, the key for the DID map is the measurement's long name directly
-    # There seems to be a problem in the file for some BCM modules, where the key appears with spaces but it should have contained underscores (even MCD Kernel complains)
-    mwb_long_name = mwb_table_key
-    
-    map_key = mwb_long_name
-    try:
-        # Try the normal key, then apply the workaround if it fails
-        mwb_long_name_to_did_map[map_key]
-    except KeyError:
-        map_key = map_key.replace(' ', '_')
-        
-        # If that key doesn't work either, just return None
-        try:
-            mwb_long_name_to_did_map[map_key]
-        except KeyError:
-            return None
-                    
-    # Correlate the measurement's name with its DID and LONG-NAME-ID
-    mwb_did = mwb_long_name_to_did_map[map_key]['did']
-    mwb_long_name_id = mwb_long_name_to_did_map[map_key]['long_name_id']
-    
-    # Load the measurement's table row by its reference
-    mwb_table_row = object_loader.load_object_by_reference(project_folder_path, mwb_table[mwb_table_key])
-    
-    # The table row must contain the same key it had in the map
-    if mwb_table_row['key'] != mwb_long_name:
-        raise RuntimeError('Wrong key in table row: {} vs {}'.format(mwb_table_row['key'], mwb_long_name))
-    
-    return (mwb_did, mwb_long_name, mwb_long_name_id, mwb_table_row['parameter'])
-
-
-def parse_mwb_table_row_parameter(mwb_table_row_parameter):
-    # Some sanity checks...
-    if mwb_table_row_parameter['default_mcd_value'] is not None:
-        raise RuntimeError('Table row parameter has default')
-    if mwb_table_row_parameter['sys_param'] is not None:
-        raise RuntimeError('Table row parameter has sys param')
-    if mwb_table_row_parameter['mcd_parameter_type'] != 'eVALUE':
-        raise RuntimeError('Wrong parameter type for table row parameter: {}'.format(mwb_table_row_parameter['mcd_parameter_type']))
-    
-    return (mwb_table_row_parameter['long_name'], mwb_table_row_parameter['description'], mwb_table_row_parameter['byte_position'], mwb_table_row_parameter['bit_position'])
-
-
-def get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_table, mwb_map, desired_did):
-    # mwb_map: keyed by DID, resolves to {long_name, long_name_id}
-    mwb_long_name_and_id = mwb_map[desired_did]
+# Resolve a DID to its corresponding MWB (name and table row parameter)
+def get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_keys, mwb_table, desired_did):
+    # mwb_keys: keyed by DID, resolves to {long_name, long_name_id}
+    mwb_long_name_and_id = mwb_keys[desired_did]
     mwb_long_name = mwb_long_name_and_id['long_name']
     mwb_long_name_id = mwb_long_name_and_id['long_name_id']
     
-    # mwb_table: keyed by long_name, resolves to reference to row
+    # mwb_table: keyed by long_name, resolves to parsed row parameter
     # Normally, the key for the DID map is the measurement's long name directly
     # There seems to be a problem in the file for some BCM modules, where the key appears with spaces but it should have contained underscores (even MCD Kernel complains)
     mwb_table_key = mwb_long_name
@@ -1450,24 +1499,26 @@ def get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_pa
         except KeyError:
             return None
     
-    mwb_table_row_reference = mwb_table[mwb_table_key]
-    
-    # Load the measurement's table row by its reference
-    mwb_table_row = object_loader.load_object_by_reference(project_folder_path, mwb_table_row_reference)
-    
-    # The table row must contain the same key it had in the map
-    if mwb_table_row['key'] != mwb_table_key:
-        raise RuntimeError('Wrong key in table row: {} vs {}'.format(mwb_table_row['key'], mwb_table_key))
-    
-    return (mwb_long_name, mwb_long_name_id, mwb_table_row['parameter'])
+    # Return the parameter and its name
+    return (mwb_long_name, mwb_long_name_id, mwb_table[mwb_table_key])
 
 
+# Get the important fields of a MWB table row parameter
+def parse_mwb_table_row_parameter(mwb_table_row_parameter):
+    # Some sanity checks...
+    if mwb_table_row_parameter['default_value'] is not None:
+        raise RuntimeError('Table row parameter has default')
+    if mwb_table_row_parameter['parameter_type'] != 'VALUE':
+        raise RuntimeError('Wrong parameter type for table row parameter: {}'.format(mwb_table_row_parameter['parameter_type']))
+    # Return the important fields
+    return (mwb_table_row_parameter['long_name'], mwb_table_row_parameter['description'], mwb_table_row_parameter['byte_position'], mwb_table_row_parameter['bit_position'])
+
+
+# Get the structure referenced by a MWB table row parameter
 def get_mwb_structure(object_loader, project_folder_path, mwb_table_row_parameter):
-    # Load the parameter's associated DOP by its reference (which should be a structure, type MCD_DB_PARAMETER_STRUCTURE)
-    mwb_structure = object_loader.load_object_by_reference(project_folder_path, mwb_table_row_parameter['db_object_ref'])
-    if mwb_structure['#OBJECT_TYPE'] != 'MCD_DB_PARAMETER_STRUCTURE':
-        raise RuntimeError('Wrong data type for parameter structure: {}'.format(mwb_structure['#OBJECT_TYPE']))
-    return mwb_structure
+    if mwb_table_row_parameter['dop']['type'] != 'STRUCTURE':
+        raise RuntimeError('Wrong data type for parameter structure: {}'.format(mwb_table_row_parameter['dop']['type']))
+    return mwb_table_row_parameter['dop']
 
 
 def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_folder_path, base_variant_filename, output_folder_path, overwrite = False, debug_info_indentation_level = 0):
@@ -1528,17 +1579,20 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
             # Otherwise, retrieve the ECU-VARIANT's layer data
             else:
                 ecu_variant_layer_data = get_ecu_variant_layer_data(object_loader, project_folder_path, ecu_variant_map[ecu_variant_name])
+    
+            # These objects will be used (in this order) for solving references which don't specify a PoolID
+            layer_data_objects = [ecu_variant_layer_data, base_variant_layer_data] + protocol_layer_data_list
             
             # Get a map of all available MWBs = Measuring Value(s / Blocks)
-            mwb_map_result = get_mwb_map(object_loader, project_folder_path, ecu_variant_layer_data)
+            mwb_keys_and_table_result = get_mwb_keys_and_table(object_loader, layer_data_objects, project_folder_path, ecu_variant_layer_data)
             
             # Skip ECU-VARIANTs which do not have the MWB service defined (no file will be created)
-            if mwb_map_result is None:
+            if mwb_keys_and_table_result is None:
                 object_printer.print_indented(debug_info_indentation_level + 1, 'Has no MWBs')
                 continue
             
-            # In the response parameter table, the methods for decoding responses are keyed by the measurement's name
-            (mwb_map, response_parameter_table) = mwb_map_result
+            # Unpack the result
+            mwb_keys, mwb_table = mwb_keys_and_table_result
             
             # Create the BASE-VARIANT's output folder if it doesn't exist
             if not os.path.isdir(base_variant_output_folder_path):
@@ -1546,31 +1600,20 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
             
             # Open the output file and dump the MWBs
             with open(ecu_variant_output_file_path, 'w', encoding='utf-8') as ecu_variant_output_file:
-                # Back to the 'Param_DataRecor' response parameter's table, go through the entries in the key map
-                # Each one has a reference to the table row with the specified LONG-NAME
-                mwb_table = get_mwb_table(response_parameter_table)
-                for mwb_did in mwb_map:
+                for mwb_did in mwb_keys:
                     # Get the definition for the current DID
-                    result = get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_table, mwb_map, mwb_did)
-                    if result is None:
+                    table_row_result = get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_keys, mwb_table, mwb_did)
+                    if table_row_result is None:
                         raise RuntimeError('Failed to find MWB table row')
                     
-                    # Decode the table row
-                    mwb_long_name, mwb_long_name_id, mwb_table_row_parameter = result
+                    # Unpack the result
+                    mwb_long_name, mwb_long_name_id, mwb_table_row_parameter = table_row_result
                     
                     # Parse the parameter
                     mwb_table_row_parameter_long_name, mwb_description, mwb_byte_position, mwb_bit_position = parse_mwb_table_row_parameter(mwb_table_row_parameter)
                     
                     # Get the object of type 'STRUCTURE'
                     mwb_structure = get_mwb_structure(object_loader, project_folder_path, mwb_table_row_parameter)
-                    
-                    # These objects will be used (in this order) for solving references which don't specify a PoolID
-                    layer_data_objects = [ecu_variant_layer_data, base_variant_layer_data] + protocol_layer_data_list
-                    
-                    # Parse the structure
-                    parsed_mwb_structure = parse_dop(object_loader, layer_data_objects, project_folder_path, mwb_structure)
-                    if parsed_mwb_structure['type'] != 'STRUCTURE':
-                        raise RuntimeError('MWB base DOP shoud be STRUCTURE, not {}'.format(parsed_mwb_structure['type']))
                     
                     # Create an object (dictionary) with the fields retrieved from the table row and the parameter structure
                     obj = {
@@ -1580,7 +1623,7 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
                         'description': mwb_description,
                         'byte_position': mwb_byte_position,
                         'bit_position': mwb_bit_position,
-                        'structure': parsed_mwb_structure
+                        'structure': mwb_structure
                     }
                     
                     # Dump to the output file
