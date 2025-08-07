@@ -5,14 +5,11 @@ This Python project is meant to unpack (and make use of) the data stored in MCD 
 Normally, these files are used by the MCD Kernel which is then used by ODIS or iDEX or whatever.
 Provided with every ODIS installation is an app `MCD-Kernel/VWMCDClient.exe` which can be used to mess around with the projects at a much lower level.
 
-A sane person who wants to use this data would use the .lib and .h files from `Include_Libs/cpp` to write their own C++ app that parses the objects.
+To use this data, one would normally use the libraries from `Include_Libs` and `MCD-Kernel` to write their own C++/Java app that parses the objects.
 There are a few issues with this approach, though:
-  1. You have to either figure out how to calculate the "secret challenge" to unlock the kernel for use, or crack the .dll.
-  2. There is seemingly no way to access a Multiplexer's CASE objects that I know of (except providing a PDU (response) and processing it).
-  - As I have discovered, the internal Multiplexer definitions are a bit strange, using strings to store values instead of the proper data type.
-  Perhaps this was done since they were never intended to be presented to the user.
-  3. In the same vein, many other elements are not directly accessible. This is no good for my curiosity's sake.
-  4. Worst of all... you have to actually write C++ and fight with Visual Studio every step of the way D:
+  1. You have to either figure out how to calculate the "secret MAC" to unlock the kernel for use, or crack the .dll.
+  2. Almost every function call must be guarded, as exceptions are thrown when the requested element is not defined.
+  3. Some database elements are not directly accessible using the provided API, or at least hard to reach.
 
 With this tool, you can approach the databases from the lowest level possible.
 I hope it is useful for the study of ODX, J2534, UDS and whatever else.
