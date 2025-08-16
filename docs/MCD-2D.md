@@ -86,6 +86,34 @@ In a response, the received coded value shall be converted into the physical rep
 After that, the specified and the calculated values can be compared.
 
 
+## SYSTEM parameter: MCD-2D V2.2 - page 80, paragraph 1
+
+The parameter of type `SYSTEM` is used to cause the D-server to calculate a value that depends on the run time information (e.g. the current system time),
+or on the special D-server information (e.g. the tester ID).
+
+The value received by the D-server is a physical value and shall be coded using the referenced DOP.
+The member `SYSPARAM` defines this value type.
+
+Within a response, the handling of parameters of type `SYSTEM` is similar to the handling of parameters of type `VALUE`.
+
+All `SYSPARAM`s listed below shall be supported by any D-server:
+
+| SYSPARAM  | data type (physical) | coding                                                                                                                 | example                                                   |
+|:---------:|:--------------------:|:----------------------------------------------------------------------------------------------------------------------:|:---------------------------------------------------------:|
+| TIMEZONE  | A_INT32              | Count of minutes to UTC                                                                                                | +60 (Berlin)                                              |
+| YEAR      | A_UINT32             | YYYY                                                                                                                   | 2008                                                      |
+| MONTH     | A_UINT32             | MM                                                                                                                     | 03 (march)                                                |
+| DAY       | A_UINT32             | DD                                                                                                                     | 01 (first day of month)                                   |
+| HOUR      | A_UINT32             | hh                                                                                                                     | 22 (10 pm)                                                |
+| MINUTE    | A_UINT32             | mm                                                                                                                     | 00 (full hour)                                            |
+| SECOND    | A_UINT32             | ss                                                                                                                     | 00 (full minute)                                          |
+| TESTERID  | A_BYTEFIELD          |                                                                                                                        | "00F056"                                                  |
+| USERID    | A_BYTEFIELD          |                                                                                                                        | "043FF0"                                                  |
+| CENTURY   | A_UINT32             | CC                                                                                                                     | 20 (in year 2008)                                         |
+| WEEK      | A_UINT32             |                                                                                                                        | 04 (Fourth week of the year)                              |
+| TIMESTAMP | A_BYTEFIELD          | The number of elapsed milliseconds since 1970-01-01 00:00:00 GMT coded as 64-bit integer (most significant byte first) | "0x0000011d73eb0b18" for the date 2008-11-06 22:27:43 GMT |
+
+
 ## Data Parameter: MCD-2D V2.2 - 7.3.6
 
 The following classes of diagnostic data objects are used for request and/or response parameters:

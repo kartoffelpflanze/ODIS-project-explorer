@@ -217,6 +217,24 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     # Add the referenced DOP to the object
                     output_object['dop'] = parse_dop(object_loader, layer_data_objects, project_folder_path, parameter_dop)
                 
+                # SYSTEM parameter: MCD-2D V2.2 - page 80, paragraph 1
+                case 'eSYSTEM':
+                    # The parameter of type `SYSTEM` is used to cause the D-server to calculate a value that depends on the run time information
+                    output_object['parameter_type'] = 'SYSTEM'
+                    
+                    # The member `SYSPARAM` defines this value type
+                    output_object['sysparam'] = dop['sys_param']
+                    
+                    output_object['default_value'] = None
+                    if dop['default_mcd_value'] is not None:
+                        raise RuntimeError('SYSTEM parameter has default')
+                    
+                    # The value received by the D-server is a physical value and shall be coded using the referenced DOP
+                    parameter_dop = object_loader.load_DOP_by_reference_without_PoolID(project_folder_path, layer_data_objects, dop['db_object_ref'])
+                    
+                    # Add the referenced DOP to the object
+                    output_object['dop'] = parse_dop(object_loader, layer_data_objects, project_folder_path, parameter_dop)
+                
                 case _:
                     object_printer.print_indented(0, '') 
                     object_printer.print_object(dop, 'dop', 0)
@@ -361,11 +379,12 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 (output_object['encoding'] == 'SM'         and output_object['coded_base_data_type'] not in ['A_INT32'                              ]) or
                 (output_object['encoding'] == 'IEEE754'    and output_object['coded_base_data_type'] not in ['A_FLOAT32', 'A_FLOAT64'               ]) or
                 (output_object['encoding'] == 'ISO-8859-1' and output_object['coded_base_data_type'] not in ['A_ASCIISTRING'                        ]) or
+                (output_object['encoding'] == 'ISO-8859-2' and output_object['coded_base_data_type'] not in ['A_ASCIISTRING'                        ]) or
                 (output_object['encoding'] == 'UCS-2'      and output_object['coded_base_data_type'] not in ['A_UNICODE2STRING'                     ]) or
                 (output_object['encoding'] == 'UTF-8'      and output_object['coded_base_data_type'] not in ['A_UNICODE2STRING'                     ]) or # should use UCS-2... idk
                 (output_object['encoding'] == 'NONE'       and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD', 'A_BITFIELD'])):
                     raise RuntimeError('Invalid ENCODING for {}: {}'.format(output_object['coded_base_data_type'], output_object['encoding']))
-            if output_object['encoding'] not in ['BCD-UP', 'BCD-P', '2C', '1C', 'SM', 'IEEE754', 'ISO-8859-1', 'UCS-2', 'UTF-8', 'NONE']:
+            if output_object['encoding'] not in ['BCD-UP', 'BCD-P', '2C', '1C', 'SM', 'IEEE754', 'ISO-8859-1', 'ISO-8859-2', 'UCS-2', 'UTF-8', 'NONE']:
                 raise RuntimeError('Unknown ENCODING (for {}): {}'.format(output_object['coded_base_data_type'], output_object['encoding']))
             
             # Store the IS-HIGHLOW-BYTE-ORDER attribute as 'big'/'little' endianness

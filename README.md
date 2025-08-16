@@ -70,38 +70,6 @@ or unhandled fields in handled object types (which I hardcoded since they were t
 > python dumpAllProjects.py "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/Projects"
 > ```
 
-### `dumpDTC`
-
-This script will dump "DTC definitions".
-It will only dump the objects necessary for DTCs (= diagnostic trouble codes).
-
-> [!TIP]
-> ```powershell
-> python dumpDTC.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-> ```powershell
-> python dumpDTC.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-> ```powershell
-> python dumpDTC.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-
-### `dumpFreezeFrames`
-
-This script will dump "Freeze Frame definitions".
-It will only dump the objects necessary for DTC extended data records.
-
-> [!TIP]
-> ```powershell
-> python dumpFreezeFrames.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-> ```powershell
-> python dumpFreezeFrames.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-> ```powershell
-> python dumpFreezeFrames.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
-> ```
-
 ### `dumpECUVariantPatterns`
 
 This script will dump "ECU-VARIANT matching patterns", necessary for the "variant identification" procedure (selecting the appropriate file for an ECU).
@@ -117,10 +85,74 @@ This script will dump "ECU-VARIANT matching patterns", necessary for the "varian
 > python dumpECUVariantPatterns.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/Patterns"
 > ```
 
+### `dumpDTC`
+
+This script will dump "DTC definitions".
+It will only dump the objects necessary for DTCs (= diagnostic trouble codes) - service 0x19.
+
+> [!TIP]
+> ```powershell
+> python dumpDTC.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpDTC.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpDTC.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/DTCs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+
+### `dumpFreezeFrames`
+
+This script will dump "Freeze Frame definitions".
+It will only dump the objects necessary for DTC extended data records - service 0x19, mode 0x06.
+
+> [!TIP]
+> ```powershell
+> python dumpFreezeFrames.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpFreezeFrames.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+> ```powershell
+> python dumpFreezeFrames.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/FFs" "C:/ProgramData/OE/DIDB/db" en_US
+> ```
+
+### `dumpAdaptations`
+
+This script will dump "Adaptation definitions".
+It will only dump the objects necessary for Calibration Data Writing (= values you can change in the ECU) - service 0x2E.
+
+> [!TIP]
+> ```powershell
+> python dumpAdaptations.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/ADPs"
+> ```
+> ```powershell
+> python dumpAdaptations.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/ADPs"
+> ```
+> ```powershell
+> python dumpAdaptations.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/ADPs"
+> ```
+
+### `dumpCoding`
+
+This script will dump "Coding definitions".
+It will only dump the objects necessary for Variant Coding - service 0x2E, DID 0x0600.
+
+> [!TIP]
+> ```powershell
+> python dumpCoding.py basevariant "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "0.0.0@BV_DashBoardUDS.bv" "O:/VRCs"
+> ```
+> ```powershell
+> python dumpCoding.py project "C:/ProgramData/OE/MCD-Projects-E/VWMCD/AU21X" "O:/VRCs"
+> ```
+> ```powershell
+> python dumpCoding.py projects "C:/ProgramData/OE/MCD-Projects-E/VWMCD" "O:/VRCs"
+> ```
+
 ### `dumpMWB`
 
 This script will dump "MWB definitions".
-It will only dump the objects necessary for MWBs (= Messwertblöcke - Measuring blocks), more often referred to as MWs (Messwerte - Measurements).
+It will only dump the objects necessary for MWBs (= Messwertblöcke - Measuring blocks) - service 0x22.
 
 This is by far the most important and non-standardized part of UDS diagnostics, one of the main purposes of this project.
 
