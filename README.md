@@ -1,5 +1,9 @@
 # ODIS project explorer
 
+Nefarious Motorsports forum thread: [http://nefariousmotorsports.com/forum/index.php?topic=23836.0](http://nefariousmotorsports.com/forum/index.php?topic=23836.0)
+
+---
+
 This Python project is meant to unpack (and make use of) the data stored in MCD Runtime Projects ([colloquially known as "*.db and .key files*"](http://nefariousmotorsports.com/forum/index.php?topic=10318.msg108305#msg108305)).
 
 Normally, these files are used by the MCD Kernel which is then used by ODIS or iDEX or whatever.

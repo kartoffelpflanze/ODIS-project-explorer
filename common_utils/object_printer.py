@@ -44,9 +44,9 @@ def print_object(obj, name = '', level = 0, file = None, int_as_hex = True):
             else:
                 print_indented(level, '{}: 0x{:X}'.format(name, obj), file)
         
-        # Print strings inside quotes
+        # Print strings inside quotes and with control characters escaped
         elif isinstance(obj, str):
-            print_indented(level, '{}: \'{}\''.format(name, obj), file)
+            print_indented(level, '{}: {}'.format(name, repr(obj)), file)
         
         # Print all other objects without additional formatting
         else:
