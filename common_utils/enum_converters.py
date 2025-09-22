@@ -1172,6 +1172,8 @@ def get_MCDDataType(value):
             return 'eTABLE_ROW'
         case 0x001C:
             return 'eSTRUCT_FIELD'
+        case 0x001D:
+            return 'eA_UTF8STRING' # "artificial"
         case 0x00FF:
             return 'eNO_TYPE'
         case _:
@@ -1214,10 +1216,12 @@ def map_enum_EDbDataType_to_MCDDataType(EDbDataType_enum):
             return 5 # eA_FLOAT64
         case 4: # eDB_ASCIISTRING
             return 1 # eA_ASCIISTRING
-        case 5 | 6: # eDB_UTF8STRING, eDB_UNICODE2STRING
+        case 5: # eDB_UTF8STRING
+            return 0x001D # eA_UTF8STRING -> "artificial"
+        case 6: # eDB_UNICODE2STRING
             return 14 # eA_UNICODE2STRING
         case 7: # eDB_BYTEFIELD
-            return 3 # c
+            return 3 # eA_BYTEFIELD
         case 8: # eDB_BITFIELD
             return 2 # eA_BITFIELD
         case _:

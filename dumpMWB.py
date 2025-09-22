@@ -3,6 +3,16 @@ import os
 import sys
 import time
 import traceback
+import json
+
+
+# Function for dumping bytearrays to JSON (as strings)
+class JSON_ByteArrayEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, bytearray):
+            return ''.join(f'{x:02X}' for x in obj)
+        return super().default(obj)
+
 
 from common_utils import enum_converters, object_printer
 from classes.PblRecordManager import PblRecordManager
@@ -159,6 +169,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     # "Pretend" the current object is of type 'DOP', in order to add it as a field like with all other PARAMs
                     dummy_dop = dop
                     dummy_dop['#OBJECT_TYPE'] = 'DB_DOP_SIMPLE_BASE'
+                    dummy_dop['is_reserved'] = True # marker so that parse_dop() allows coded type A_BITFIELD
                     output_object['dop'] = parse_dop(object_loader, layer_data_objects, project_folder_path, dummy_dop)
                 
                 # CODED-CONST parameter: MCD-2D V2.2 - page 79, paragraph 1
@@ -235,8 +246,9 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     # Add the referenced DOP to the object
                     output_object['dop'] = parse_dop(object_loader, layer_data_objects, project_folder_path, parameter_dop)
                 
+                # For unknown types, display the object and raise an exception
                 case _:
-                    object_printer.print_indented(0, '') 
+                    object_printer.print_indented(0, '')
                     object_printer.print_object(dop, 'dop', 0)
                     object_printer.print_indented(0, '')
                     raise RuntimeError('Unknown MCD type: {}'.format(dop['mcd_parameter_type']))
@@ -254,14 +266,19 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             diag_coded_type = dop['diag_coded_type']
             
             # Some sanity checks...
-            if diag_coded_type['is_condensed_bit_mask']:
-                raise RuntimeError('BITMASK is CONDENSED')
+            if diag_coded_type['is_condensed']:
+                raise RuntimeError('Parameter is CONDENSED')
             if not diag_coded_type['base_data_type_as_mcd_data_type'].startswith('eA_'):
                 raise RuntimeError('Strange BASE-DATA-TYPE: {}'.format(diag_coded_type['base_data_type_as_mcd_data_type']))
             
             # The coded value type inside the message is described by the member BASE-DATA-TYPE of the DIAG-CODED-TYPE
             # Get the coded value's BASE-DATA-TYPE (without the 'e' enum prefix)
             output_object['coded_base_data_type'] = diag_coded_type['base_data_type_as_mcd_data_type'][1:]
+            
+            # BITFIELDs aren't even a part of ODX from what I can see
+            # I have only encountered them as the coded type for RESERVED parameters
+            if output_object['coded_base_data_type'] == 'A_BITFIELD' and 'is_reserved' not in dop:
+                raise RuntimeError('Encountered A_BITFIELD as coded type')
             
             # Handle the DIAG-CODED-TYPE based on its type
             match diag_coded_type['type']:
@@ -313,9 +330,8 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                             raise RuntimeError('Unknown TERMINATION for MIN-MAX-LENGTH-TYPE: {}'.format(diag_coded_type['termination']))
                     
                     # In the case of A_UNICODE2STRING, the length of the actual payload and the values of MIN-LENGTH and MAX-LENGTH shall be even
-                    #if output_object['coded_base_data_type'] == 'A_UNICODE2STRING' and (output_object['min_length'] % 2 != 0 or output_object['max_length'] % 2 != 0):
-                    #    raise RuntimeError('MIN-LENGTH and MAX-LENGTH for coded BASE-DATA-TYPE A_UNICODE2STRING should be even, not {}, {}'.format(output_object['min_length'], output_object['max_length']))
-                    ### Encountered A_UNICODE2STRING with MAX-LENGTH 4095, so...
+                    if output_object['coded_base_data_type'] == 'A_UNICODE2STRING' and (output_object['min_length'] % 2 != 0 or output_object['max_length'] % 2 != 0):
+                        raise RuntimeError('MIN-LENGTH and MAX-LENGTH for coded BASE-DATA-TYPE A_UNICODE2STRING should be even, not {}, {}'.format(output_object['min_length'], output_object['max_length']))
                 
                 # The parameter always occupies the specified length of BIT-LENGTH bits inside the message
                 case 'eSTANDARD_LENGTH_TYPE':
@@ -346,32 +362,43 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             
             # Regardless of the type of length specification, the following additional restrictions have to be considered depending on the BASE-DATA-TYPE
             else:
-                if output_object['coded_base_data_type'] in ['A_INT32', 'A_UINT32'] and output_object['bit_length'] not in range(1, 32 +1):
-                    #raise RuntimeError('BIT-LENGTH for {} must be between 1 and 32, not {}'.format(output_object['coded_base_data_type'], output_object['bit_length']))
-                    output_object['#error'] = 'BIT-LENGTH for {} must be between 1 and 32, not {}'.format(output_object['coded_base_data_type'], output_object['bit_length'])
-                    return output_object
                 if output_object['coded_base_data_type'] == 'A_FLOAT32' and output_object['bit_length'] != 32:
                     raise RuntimeError('BIT-LENGTH for A_FLOAT32 must be 32, not {}'.format(output_object['bit_length']))
                 if output_object['coded_base_data_type'] == 'A_FLOAT64' and output_object['bit_length'] != 64:
                     raise RuntimeError('BIT-LENGTH for A_FLOAT64 must be 64, not {}'.format(output_object['bit_length']))
-                if output_object['coded_base_data_type'] in ['A_ASCIISTRING', 'A_UTF8STRING'] and output_object['bit_length'] % 8 != 0: # for A_BYTEFIELD too, but encountered BIT-LENGTH 12 for it...
+                if output_object['coded_base_data_type'] in ['A_ASCIISTRING', 'A_UTF8STRING'] and output_object['bit_length'] % 8 != 0:
+                    # Note: seems like MCD Kernel allows A_BYTEFIELD not to cover whole bytes (and decodes it correctly), contrary to ODX spec
                     raise RuntimeError('BIT-LENGTH for {} must be multiple of 8, not {}'.format(output_object['coded_base_data_type'], output_object['bit_length']))
                 if output_object['coded_base_data_type'] == 'A_UNICODE2STRING' and output_object['bit_length'] % 16 != 0:
-                    #raise RuntimeError('BIT-LENGTH for A_UNICODE2STRING must be multiple of 16, not {}'.format(output_object['bit_length']))
-                    output_object['#error'] = 'BIT-LENGTH for A_UNICODE2STRING must be multiple of 16, not {}'.format(output_object['bit_length'])
-                    return output_object
+                    raise RuntimeError('BIT-LENGTH for A_UNICODE2STRING must be multiple of 16, not {}'.format(output_object['bit_length']))
+                
+                # There are some very rare parameters that are defined as A_UINT32/A_INT32 but have a BIT-LENGTH way bigger than 32
+                # I guess they were supposed to be arrays, but...?
+                # Not even the MCD Kernel can decode them, it just errors out with "Invalid byte length: ..."
+                # An exception won't be raised for those, they will be dumped with their original BIT-LENGTH
+                if output_object['coded_base_data_type'] in ['A_UINT32', 'A_INT32'] and output_object['bit_length'] not in range(1, 32 +1):
+                    output_object['#error'] = f'BIT-LENGTH for {output_object['coded_base_data_type']} must be between 1 and 32, not {output_object['bit_length']}'
             
             # The member ENCODING of the DIAG-CODED-TYPE gives the method used for encoding of the value in the PDU
             # Remove the 'e' prefix and replace underscores by dashes, to convert the enum value to a standard ODX name
             output_object['encoding'] = diag_coded_type['encoding'][1:].replace('_', '-')
             
-            # 
-            if output_object['encoding'] == 'NONE' and output_object['coded_base_data_type'] == 'A_FLOAT64':
-                output_object['#error'] = 'Invalid ENCODING for {}: {}'.format(output_object['coded_base_data_type'], output_object['encoding'])
-                return output_object
+            # The ODX spec seems a bit vague, but my understanding is that only non-float numerical types can have BIT-MASKs
+            # Well, I have encountered them for A_BYTEFIELD too, but it's just 1s for the entire BIT-LENGTH, so it doesn't really mask anything out
+            if 'bit_mask' in output_object and output_object['bit_mask'] is not None:
+                if output_object['coded_base_data_type'] not in ['A_UINT32', 'A_INT32', 'A_BYTEFIELD']:
+                    raise RuntimeError(f'Unexpected: type {output_object['coded_base_data_type']} (encoding {output_object['encoding']}) has BIT-MASK ({output_object['bit_mask']})')
+                
+                # Only for the BCD-UP encoding for A_BYTEFIELD, the BIT-MASK isn't always all 1s
+                expected_bit_mask = bytearray(int('1' * output_object['bit_length'], 2).to_bytes((output_object['bit_length'] + 7) // 8))
+                if output_object['coded_base_data_type'] == 'A_BYTEFIELD' and output_object['encoding'] != 'BCD-UP' and output_object['bit_mask'] != expected_bit_mask:
+                    raise RuntimeError(f'Unexpected BIT-MASK for A_BYTEFIELD (encoding {output_object['encoding']}): {output_object['bit_mask']} (expected {expected_bit_mask})')
             
-            # The loader has already checked that the ENCODING attribute is valid for the BASE-DATA-TYPE,
-            # but it is checked here again against the documentation
+            # Fix float parameters that have the wrong encoding
+            if output_object['encoding'] == 'NONE' and output_object['coded_base_data_type'] in ['A_FLOAT32', 'A_FLOAT64']:
+                output_object['encoding'] = 'IEEE754'
+            
+            # The loader has already checked that the ENCODING attribute is valid for the BASE-DATA-TYPE, # but it is checked here again against the documentation
             if ((output_object['encoding'] == 'BCD-UP'     and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD'              ]) or
                 (output_object['encoding'] == 'BCD-P'      and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD'              ]) or
                 (output_object['encoding'] == '2C'         and output_object['coded_base_data_type'] not in ['A_INT32'                              ]) or
@@ -381,7 +408,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 (output_object['encoding'] == 'ISO-8859-1' and output_object['coded_base_data_type'] not in ['A_ASCIISTRING'                        ]) or
                 (output_object['encoding'] == 'ISO-8859-2' and output_object['coded_base_data_type'] not in ['A_ASCIISTRING'                        ]) or
                 (output_object['encoding'] == 'UCS-2'      and output_object['coded_base_data_type'] not in ['A_UNICODE2STRING'                     ]) or
-                (output_object['encoding'] == 'UTF-8'      and output_object['coded_base_data_type'] not in ['A_UNICODE2STRING'                     ]) or # should use UCS-2... idk
+                (output_object['encoding'] == 'UTF-8'      and output_object['coded_base_data_type'] not in ['A_UTF8STRING'                         ]) or
                 (output_object['encoding'] == 'NONE'       and output_object['coded_base_data_type'] not in ['A_UINT32', 'A_BYTEFIELD', 'A_BITFIELD'])):
                     raise RuntimeError('Invalid ENCODING for {}: {}'.format(output_object['coded_base_data_type'], output_object['encoding']))
             if output_object['encoding'] not in ['BCD-UP', 'BCD-P', '2C', '1C', 'SM', 'IEEE754', 'ISO-8859-1', 'ISO-8859-2', 'UCS-2', 'UTF-8', 'NONE']:
@@ -400,6 +427,10 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 
                 # The member BASE-DATA-TYPE of PHYSICAL-TYPE gives the type and encoding of the physical value
                 output_object['physical_base_data_type'] = physical_type['base_data_type_as_mcd_data_type'][1:]
+                
+                # Hopefully BITFIELD is never a physical type
+                if output_object['physical_base_data_type'] == 'A_BITFIELD':
+                    raise RuntimeError('Encountered A_BITFIELD as physical type')
                 
                 # Get the DISPLAY-RADIX (numeric representation: 2 = BIN, 8 = OCT, 10 = DEC, 16 = HEX)
                 output_object['display_radix'] = physical_type['display_radix']
@@ -838,9 +869,9 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['coded_base_data_type']))
+                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for SCALE-LINEAR'.format(output_object['coded_base_data_type']))
                         if output_object['physical_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['physical_base_data_type']))
+                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for SCALE-LINEAR'.format(output_object['physical_base_data_type']))
                     
                     # A rational function (numerator and denominator are polynomials) can be defined for multiple disjunctive intervals
                     case 'eSCALE_RAT_FUNC':
@@ -932,9 +963,9 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['coded_base_data_type']))
+                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for SCALE-RAT-FUNC'.format(output_object['coded_base_data_type']))
                         if output_object['physical_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['physical_base_data_type']))
+                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for SCALE-RAT-FUNC'.format(output_object['physical_base_data_type']))
                     
                     # The internal value is transformed into a textual expression
                     case 'eTEXTTAB':
@@ -992,9 +1023,9 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64', 'A_ASCIISTRING', 'A_UTF8STRING', 'A_BYTEFIELD', 'A_UNICODE2STRING']:
-                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['coded_base_data_type']))
+                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for TEXTTABLE'.format(output_object['coded_base_data_type']))
                         if output_object['physical_base_data_type'] not in ['A_UNICODE2STRING']:
-                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['physical_base_data_type']))
+                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for TEXTTABLE'.format(output_object['physical_base_data_type']))
                     
                     case 'eTAB_INTP':
                         # A COMPU-METHOD of CATEGORY TAB-INTP defines a set of points with linear interploaton between them
@@ -1035,12 +1066,12 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['coded_base_data_type']))
+                            raise RuntimeError('Coded BASE-DATA-TYPE {} not allowed for TAB-INTP'.format(output_object['coded_base_data_type']))
                         if output_object['physical_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
-                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for LINEAR'.format(output_object['physical_base_data_type']))
+                            raise RuntimeError('Physical BASE-DATA-TYPE {} not allowed for TAB-INTP'.format(output_object['physical_base_data_type']))
                     
                     case _:
-                        object_printer.print_indented(0, '') 
+                        object_printer.print_indented(0, '')
                         object_printer.print_object(compu_method, 'compu_method', 0)
                         object_printer.print_indented(0, '')
                         raise RuntimeError('Unknown compu_category: {}'.format(compu_category))
@@ -1404,7 +1435,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
         
         # For unknown types, display the object and raise an exception
         case _:
-            object_printer.print_indented(0, '') 
+            object_printer.print_indented(0, '')
             object_printer.print_object(dop, 'dop', 0)
             object_printer.print_indented(0, '')
             raise RuntimeError('Unknown DOP type: {}'.format(dop['#OBJECT_TYPE']))
@@ -1583,8 +1614,7 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
             object_printer.print_indented(debug_info_indentation_level, 'ECU-VARIANT {}'.format(ecu_variant_name))
         
         # The MWBs will be dumped into a file named like the ECU-VARIANT
-        # The .c extension is only used for highlighting and block folding in a code editor
-        ecu_variant_output_file_path = os.path.join(base_variant_output_folder_path, 'MWB_' + ecu_variant_name + '.c')
+        ecu_variant_output_file_path = os.path.join(base_variant_output_folder_path, 'MWB_' + ecu_variant_name + '.json')
         
         # Only dump the MWBs if the file doesn't already exist (or if overwriting is allowed)
         if not overwrite and (os.path.exists(ecu_variant_output_file_path) and os.path.isfile(ecu_variant_output_file_path)):
@@ -1619,6 +1649,9 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
             
             # Open the output file and dump the MWBs
             with open(ecu_variant_output_file_path, 'w', encoding='utf-8') as ecu_variant_output_file:
+                # The MWBs will be written as a JSON array
+                obj_list = []
+                
                 for mwb_did in mwb_keys:
                     # Get the definition for the current DID
                     table_row_result = get_mwb_name_and_table_row_parameter_by_did(object_loader, project_folder_path, mwb_keys, mwb_table, mwb_did)
@@ -1645,9 +1678,11 @@ def dump_mwbs_for_base_variant(object_loader, protocol_layer_data_list, project_
                         'structure': mwb_structure
                     }
                     
-                    # Dump to the output file
-                    object_printer.print_object(obj, '0x{:04X}: {} - {}'.format(mwb_did, mwb_long_name_id, mwb_long_name), 0, ecu_variant_output_file, False)
-                    object_printer.print_indented(0, '', ecu_variant_output_file)
+                    # Add the object to the list
+                    obj_list.append(obj)
+                    
+                # Dump to the output file
+                json.dump(obj_list, ecu_variant_output_file, indent=2, cls=JSON_ByteArrayEncoder)
 
 
 def dump_mwbs_for_all_base_variants_in_project(object_loader, protocol_layer_data, project_folder_path, output_folder_path, overwrite = False, debug_info_indentation_level = 0):

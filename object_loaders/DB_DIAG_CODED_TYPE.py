@@ -58,7 +58,7 @@ def load(stream):
     obj['encoding'] = initEncoding(obj['base_data_type'], enum_converters.get_EDbEncoding(stream.loadEnumSmallRange()))
     
     obj['is_high_low_byte_order'] = bool(stream.loadOneByteType())
-    obj['is_condensed_bit_mask'] = bool(stream.loadOneByteType())
+    obj['is_condensed'] = bool(stream.loadOneByteType())
     
     if obj['type'] == 'ePARAM_LENGTH_INFO_TYPE':
         obj['length_key_parameter'] = DbObject.load_object_from_stream_if_exists(stream) # MCDDbParameterImpl
