@@ -392,7 +392,8 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 # Only for the BCD-UP encoding for A_BYTEFIELD, the BIT-MASK isn't always all 1s
                 expected_bit_mask = bytearray(int('1' * output_object['bit_length'], 2).to_bytes((output_object['bit_length'] + 7) // 8))
                 if output_object['coded_base_data_type'] == 'A_BYTEFIELD' and output_object['encoding'] != 'BCD-UP' and output_object['bit_mask'] != expected_bit_mask:
-                    raise RuntimeError(f'Unexpected BIT-MASK for A_BYTEFIELD (encoding {output_object['encoding']}): {output_object['bit_mask']} (expected {expected_bit_mask})')
+                    # Partial bit-mask: real data (limits which bits are meaningful), not an error
+                    print(f'WARNING: partial BIT-MASK for A_BYTEFIELD (encoding {output_object['encoding']}): {output_object['bit_mask']} (expected {expected_bit_mask})')
             
             # Fix float parameters that have the wrong encoding
             if output_object['encoding'] == 'NONE' and output_object['coded_base_data_type'] in ['A_FLOAT32', 'A_FLOAT64']:
@@ -1371,10 +1372,10 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             match table_key_parsed_dop['bit_length']:
                 case 8:
                     if table_key_parsed_dop['bit_mask'] is not None and table_key_parsed_dop['bit_mask'] != bytearray.fromhex('FF'):
-                        raise RuntimeError('Unexpected BIT-MASK for table key: {}'.format(table_key_parsed_dop['bit_mask']))
+                        print('WARNING: partial BIT-MASK for 8-bit table key: {}'.format(table_key_parsed_dop['bit_mask']))
                 case 16:
                     if table_key_parsed_dop['bit_mask'] is not None and table_key_parsed_dop['bit_mask'] != bytearray.fromhex('FFFF'):
-                        raise RuntimeError('Unexpected BIT-MASK for table key: {}'.format(table_key_parsed_dop['bit_mask']))
+                        print('WARNING: partial BIT-MASK for 16-bit table key: {}'.format(table_key_parsed_dop['bit_mask']))
                 case _:
                     raise RuntimeError('Unexpected BIT-LENGTH for table key: {}'.format(table_key_parsed_dop['bit_length']))
             

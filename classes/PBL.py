@@ -1,4 +1,5 @@
 import os
+import sys
 from ctypes import *
 
 
@@ -6,6 +7,13 @@ class PBL:
     # Constructor
     ### dll_path = path to "pbl.dll"
     def __init__(self, dll_path):
+        # On Linux, use the native .so instead of the Windows .dll
+        if sys.platform != 'win32':
+            linux_so = os.path.join(os.path.dirname(dll_path), 'pbl_linux.so')
+            if not os.path.isfile(linux_so):
+                raise FileNotFoundError(f'pbl_linux.so not found at {linux_so}')
+            dll_path = linux_so
+
         # Load the DLL from the given path
         dll = CDLL(dll_path)
         
