@@ -866,7 +866,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                             
                             # The COMPU-DEFAULT-VALUE's data type seems to be Unicode string...?
                             if compu_method['compu_internal_to_phys']['compu_default_value']['data_type'] != 'eA_UNICODE2STRING':
-                                raise RuntimeError('COMPU-DEFAULT-VALUE ({}) data type is not A_UNICODE2STRING: {}'.format(compu_method['compu_internal_to_phys']['compu_default_value']['data_type']))
+                                raise RuntimeError('COMPU-DEFAULT-VALUE data type is not A_UNICODE2STRING: {}'.format(compu_method['compu_internal_to_phys']['compu_default_value']['data_type']))
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
@@ -960,7 +960,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                             
                             # The COMPU-DEFAULT-VALUE's data type seems to be Unicode string...?
                             if compu_method['compu_internal_to_phys']['compu_default_value']['data_type'] != 'eA_UNICODE2STRING':
-                                raise RuntimeError('COMPU-DEFAULT-VALUE ({}) data type is not A_UNICODE2STRING: {}'.format(compu_method['compu_internal_to_phys']['compu_default_value']['data_type']))
+                                raise RuntimeError('COMPU-DEFAULT-VALUE data type is not A_UNICODE2STRING: {}'.format(compu_method['compu_internal_to_phys']['compu_default_value']['data_type']))
                         
                         # Check possible data types
                         if output_object['coded_base_data_type'] not in ['A_INT32', 'A_UINT32', 'A_FLOAT32', 'A_FLOAT64']:
@@ -988,7 +988,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                             
                             # Both LIMITs' data types must match the coded data type
                             if compu_scale['lower_limit_as_coded_value']['mcd_value']['data_type'] != 'e'+output_object['coded_base_data_type'] or compu_scale['upper_limit_as_coded_value']['mcd_value']['data_type'] != 'e'+output_object['coded_base_data_type']:
-                                raise RuntimeError('Data types of coded LOWER/UPPER-LIMIT {}, {} do not match coded data type {}'.format(compu_scale['lower_limit_as_coded_value']['mcd_value']['data_type'], compu_scale['upper_limit_as_coded_value']['mcd_value']['data_type'], compu_scale_output_object['coded_base_data_type']))
+                                raise RuntimeError('Data types of coded LOWER/UPPER-LIMIT {}, {} do not match coded data type {}'.format(compu_scale['lower_limit_as_coded_value']['mcd_value']['data_type'], compu_scale['upper_limit_as_coded_value']['mcd_value']['data_type'], output_object['coded_base_data_type']))
                             
                             # Get the LIMITs
                             compu_scale_output_object['lower_limit'] = compu_scale['lower_limit_as_coded_value']['mcd_value']['value']
