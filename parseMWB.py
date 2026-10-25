@@ -1,6 +1,7 @@
 import argparse
 import os
 import math
+import struct
 from decimal import Decimal, ROUND_HALF_UP
 
 from common_utils import enum_converters, object_printer
@@ -301,8 +302,10 @@ def get_dop_value(dop, dop_response_bytes_slice, dop_bit_position):
             if dop_bit_length != 32:
                 raise RuntimeError('A_FLOAT32 needs BIT-LENGTH 32, not {}'.format(dop_bit_length))
             
-            # Convert the bits to 4 bytes, then to float
-            internal_value = struct.unpack('f', struct.pack('L', int(response_bits, 2)))[0]
+            # Convert the bits to 4 bytes, then to float ('I'/'f' are the
+            # fixed 4-byte formats; 'L' is 8 bytes on LP64 and made this
+            # raise struct.error)
+            internal_value = struct.unpack('>f', struct.pack('>I', int(response_bits, 2)))[0]
         
         # Double precision floating point
         case 'A_FLOAT64':
@@ -805,9 +808,9 @@ def get_parameter_byte_length(parameter, parameter_response_bytes_slice):
                             # For A_UNICODE2STRING, the termination sequence is 0x0000
                             # For all other types which support MIN-MAX-LENGTH-TYPE, it's 0x00
                             if parameter['dop']['coded_base_data_type'] == 'A_UNICODE2STRING':
-                                index_of_termination_in_response = (bytearray.fromhex('0000') in parameter_response_bytes_slice)
+                                index_of_termination_in_response = parameter_response_bytes_slice.find(bytearray.fromhex('0000'))
                             else:
-                                index_of_termination_in_response = (bytearray.fromhex('00') in parameter_response_bytes_slice)
+                                index_of_termination_in_response = parameter_response_bytes_slice.find(bytearray.fromhex('00'))
                             
                             # If the termination sequence was found, the bytes before it are used by the PARAM
                             if index_of_termination_in_response != -1:
@@ -826,9 +829,9 @@ def get_parameter_byte_length(parameter, parameter_response_bytes_slice):
                             # For A_UNICODE2STRING, the termination sequence is 0xFFFF
                             # For all other types which support MIN-MAX-LENGTH-TYPE, it's 0xFF
                             if parameter['dop']['coded_base_data_type'] == 'A_UNICODE2STRING':
-                                index_of_termination_in_response = (bytearray.fromhex('FFFF') in parameter_response_bytes_slice)
+                                index_of_termination_in_response = parameter_response_bytes_slice.find(bytearray.fromhex('FFFF'))
                             else:
-                                index_of_termination_in_response = (bytearray.fromhex('FF') in parameter_response_bytes_slice)
+                                index_of_termination_in_response = parameter_response_bytes_slice.find(bytearray.fromhex('FF'))
                             
                             # If the termination sequence was found, the bytes before it are used by the PARAM
                             if index_of_termination_in_response != -1:
@@ -949,10 +952,15 @@ def get_parameter_byte_length(parameter, parameter_response_bytes_slice):
             field_byte_length = 0
             current_byte_position = 0
             while True:
-                # Stop parsing if the end of the PDU is reached
-                if len(parameter_response_bytes_slice) == current_byte_position:
+                # Stop parsing if the end of the PDU is reached. A declared
+                # STRUCTURE length can overshoot the remaining bytes (short
+                # or corrupt response) - error out instead of spinning
+                # forever on an equality that can never fire again.
+                if len(parameter_response_bytes_slice) <= current_byte_position:
+                    if len(parameter_response_bytes_slice) < current_byte_position:
+                        raise RuntimeError('STRUCTURE length overshoots the remaining response bytes')
                     break
-                
+
                 # Get the bytes needed for the STRUCTURE
                 structure_response_bytes_slice = parameter_response_bytes_slice[current_byte_position:]
                 
@@ -1039,7 +1047,7 @@ def parse_mwb_dop(dop, dop_response_bytes_slice, dop_bit_position = 0):
                     # Even though there is technically no conversion from internal to physical value, the "display value" will contain the coded value as expected
                     child = parse_mwb_dop(dop['dop'], dop_response_bytes_slice, dop['bit_position'])
                     if child['type'] != 'VAL':
-                        raise RuntimeError('DOP for CODED-CONST must be simple value, not {}'.fornat(child['type']))
+                        raise RuntimeError('DOP for CODED-CONST must be simple value, not {}'.format(child['type']))
                     
                     # Get the constant value as a string, depending on its data type
                     match dop['constant']['data_type']:
