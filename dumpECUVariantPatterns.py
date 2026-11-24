@@ -66,6 +66,7 @@ def dump_patterns_for_base_variant(object_loader, project_folder_path, base_vari
             output_object['name'] = ecu_variant['ecu']['long_name']
             output_object['description'] = ecu_variant['ecu']['description']
             output_object['matching_patterns'] = []
+            is_kwp_variant = False
             
             # Go through each matching pattern of the ECU-VARIANT
             for matching_pattern in ecu_variant['matching_patterns']:
@@ -100,10 +101,15 @@ def dump_patterns_for_base_variant(object_loader, project_folder_path, base_vari
                         # These ones are used for KWP2000 ECU-VARIANT selection
                         case 'MB_Identification_Read' | 'DCX_Identification_Read' | 'ActiveDiagnosticInformation_Read':
                             object_printer.print_indented(debug_info_indentation_level + 1, 'Not for UDS')
-                            return
+                            is_kwp_variant = True
+                            break
                         
                         case _:
                             raise RuntimeError('Unknown matching parameter: {}'.format(matching_parameter['diag_com_primitive_ref']['attrib_obj_ref']['object_id']))
+                
+                # Stop at the first KWP2000 matching service
+                if is_kwp_variant:
+                    break
                 
                 # The pattern object contains the Identifier and Version, if defined
                 output_matching_parameters = {
@@ -115,6 +121,9 @@ def dump_patterns_for_base_variant(object_loader, project_folder_path, base_vari
                 # Add the matching pattern to the list
                 output_object['matching_patterns'].append(output_matching_parameters)
             
+            # Skip the KWP2000 ECU-VARIANT without writing a file
+            if is_kwp_variant:
+                continue
             
             # Create the BASE-VARIANT's output folder if it doesn't exist
             if not os.path.isdir(base_variant_output_folder_path):
