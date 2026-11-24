@@ -135,7 +135,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     
                     # If not found (error in project), mimic the MCD error that is thrown on projects with this sort of problem
                     except:
-                        output_object['dop'] = {'#error': 'Access to database element failed - DOP with name: {}'.format(dop['db_object_ref']['object_id'])}
+                        output_object['dop'] = {'#error': 'Access to database element failed - DOP with name: {}'.format(dop['db_object_ref']['object_id'] if dop['db_object_ref'] is not None else None)}
                     
                     # The DOP is usually found
                     else:
@@ -491,7 +491,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         raise RuntimeError('IC should not be computed')
                     
                     # The LIMITs' data types should match the coded data type
-                    if internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
+                    if internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or internal_constraint['interval']['upper_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
                         raise RuntimeError('IC limit data types do not match coded type: {}, {} vs {}'.format(internal_constraint['interval']['lower_limit']['data_type'], internal_constraint['interval']['upper_limit']['data_type'], output_object['coded_base_data_type']))
                     
                     # Get the LIMITs
@@ -514,7 +514,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     output_object['internal_constraint']['scale_constraints'] = []
                     for scale_constraint in internal_constraint['scale_constraints']:
                         # The LIMITs' data types should match the coded data type
-                        if scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
+                        if scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or scale_constraint['interval']['upper_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
                             raise RuntimeError('IC SCALE-CONSTR limit data types do not match coded type: {}, {} vs {}'.format(scale_constraint['interval']['lower_limit']['data_type'], scale_constraint['interval']['upper_limit']['data_type'], output_object['coded_base_data_type']))
                         
                         # Get the LIMITs
@@ -639,7 +639,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 # For all COMPU-METHODs, except those of categories IDENTICAL, TEXTTABLE and COMPUCODE, the calculation type (float or integer) is deduced from the type of the internal and physical values
                 # It has a decisive influence on the precision of the calculation
                 output_object['calculation_type'] = None
-                if compu_category not in ['eIDENTICAL', 'eTEXTTABLE']:
+                if compu_category not in ['eIDENTICAL', 'eTEXTTAB']:
                     # In any other case, the calculation is of type A_INT32
                     output_object['calculation_type'] = 'A_INT32'
                     
@@ -1274,7 +1274,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             physical_type = dop['physical_type']
             compu_method = dop['compu_method']
             if diag_coded_type['type'] != 'eSTANDARD_LENGTH_TYPE':
-                raise RuntimeError('DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not {}').format(diag_coded_type['type'])
+                raise RuntimeError('DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not {}'.format(diag_coded_type['type']))
             if diag_coded_type['bit_length'] != 24:
                 raise RuntimeError('DTC BIT-LENGTH must be 24, not {}'.format(diag_coded_type['bit_length']))
             if diag_coded_type['bit_mask'] != bytearray():
@@ -1324,7 +1324,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 
                 # The referenced DTC's trouble code must match the map key
                 if dtc['trouble_code'] != map_item['map_key']:
-                    raise 'Trouble code {:X} does not match map key {:X}'.format(dtc['trouble_code'], map_item['map_key'])
+                    raise RuntimeError('Trouble code {:X} does not match map key {:X}'.format(dtc['trouble_code'], map_item['map_key']))
                 
                 dtc_output_object['label'] = dtc['label']
                 dtc_output_object['short_name'] = dtc['short_name']
