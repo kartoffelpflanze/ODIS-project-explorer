@@ -103,6 +103,15 @@ class ParseDopInternalConstraintTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, r'^IC limit data types do not match coded type: eA_UINT32, eA_INT32 vs A_UINT32$'):
             parse_simple_dop(dop, {'ic': constraint})
 
+    def test_scale_constraint_upper_limit_type_is_checked(self):
+        constraint = make_internal_constraint(
+            make_interval(),
+            [make_scale_constraint(make_interval('eA_UINT32', 'eA_INT32'))])
+        dop = make_simple_dop(internal_constraint_ref='ic')
+
+        with self.assertRaisesRegex(RuntimeError, r'^IC SCALE-CONSTR limit data types do not match coded type: eA_UINT32, eA_INT32 vs A_UINT32$'):
+            parse_simple_dop(dop, {'ic': constraint})
+
     def test_internal_constraint_matching_types_pass(self):
         constraint = make_internal_constraint(
             make_interval(),

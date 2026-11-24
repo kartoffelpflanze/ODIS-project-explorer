@@ -514,7 +514,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                     output_object['internal_constraint']['scale_constraints'] = []
                     for scale_constraint in internal_constraint['scale_constraints']:
                         # The LIMITs' data types should match the coded data type
-                        if scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
+                        if scale_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or scale_constraint['interval']['upper_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
                             raise RuntimeError('IC SCALE-CONSTR limit data types do not match coded type: {}, {} vs {}'.format(scale_constraint['interval']['lower_limit']['data_type'], scale_constraint['interval']['upper_limit']['data_type'], output_object['coded_base_data_type']))
                         
                         # Get the LIMITs
