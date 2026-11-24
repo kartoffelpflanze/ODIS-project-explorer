@@ -491,7 +491,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                         raise RuntimeError('IC should not be computed')
                     
                     # The LIMITs' data types should match the coded data type
-                    if internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
+                    if internal_constraint['interval']['lower_limit']['data_type'] != 'e'+output_object['coded_base_data_type'] or internal_constraint['interval']['upper_limit']['data_type'] != 'e'+output_object['coded_base_data_type']:
                         raise RuntimeError('IC limit data types do not match coded type: {}, {} vs {}'.format(internal_constraint['interval']['lower_limit']['data_type'], internal_constraint['interval']['upper_limit']['data_type'], output_object['coded_base_data_type']))
                     
                     # Get the LIMITs

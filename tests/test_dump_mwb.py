@@ -28,5 +28,92 @@ class ParseDopValueParameterTest(unittest.TestCase):
         self.assertEqual(out['dop'], {'#error': 'Access to database element failed - DOP with name: None'})
 
 
+class FakeObjectLoader:
+    """Serves referenced objects (constraints, units) from a plain dict."""
+
+    def __init__(self, objects=None):
+        self.objects = objects or {}
+
+    def load_object_by_reference(self, project_folder_path, ref):
+        return self.objects[ref]
+
+
+def make_limit(data_type, value=0):
+    return {'data_type': data_type, 'value': value}
+
+
+def make_interval(lower_type='eA_UINT32', upper_type='eA_UINT32'):
+    return {
+        'lower_limit': make_limit(lower_type, 0),
+        'lower_limit_type': 'eLIMIT_CLOSED',
+        'upper_limit': make_limit(upper_type, 255),
+        'upper_limit_type': 'eLIMIT_CLOSED',
+    }
+
+
+def make_scale_constraint(interval):
+    return {
+        'interval': interval,
+        'range_info': 'eRANGE_VALID',
+        'short_label': None,
+        'description': None,
+    }
+
+
+def make_internal_constraint(interval, scale_constraints=()):
+    return {
+        'is_computed': False,
+        'interval': interval,
+        'scale_constraints': list(scale_constraints),
+    }
+
+
+def make_simple_dop(coded_type='eA_UINT32', **overrides):
+    """Build a minimal DB_DOP_SIMPLE_BASE object; keyword arguments override or add fields."""
+    dop = {
+        '#OBJECT_TYPE': 'DB_DOP_SIMPLE_BASE',
+        'diag_coded_type': {
+            'is_condensed': False,
+            'base_data_type_as_mcd_data_type': coded_type,
+            'type': 'eSTANDARD_LENGTH_TYPE',
+            'bit_length': 32,
+            'bit_mask': bytearray(),
+            'encoding': 'eNONE',
+            'is_high_low_byte_order': True,
+        },
+        'compu_method': {
+            'compu_category': 'eIDENTICAL',
+            'compu_internal_to_phys': None,
+            'compu_phys_to_internal': None,
+        },
+    }
+    dop.update(overrides)
+    return dop
+
+
+def parse_simple_dop(dop, objects=None):
+    return dumpMWB.parse_dop(FakeObjectLoader(objects), [], 'project', dop)
+
+
+class ParseDopInternalConstraintTest(unittest.TestCase):
+    def test_internal_constraint_upper_limit_type_is_checked(self):
+        constraint = make_internal_constraint(make_interval('eA_UINT32', 'eA_INT32'))
+        dop = make_simple_dop(internal_constraint_ref='ic')
+
+        with self.assertRaisesRegex(RuntimeError, r'^IC limit data types do not match coded type: eA_UINT32, eA_INT32 vs A_UINT32$'):
+            parse_simple_dop(dop, {'ic': constraint})
+
+    def test_internal_constraint_matching_types_pass(self):
+        constraint = make_internal_constraint(
+            make_interval(),
+            [make_scale_constraint(make_interval())])
+        dop = make_simple_dop(internal_constraint_ref='ic')
+
+        out = parse_simple_dop(dop, {'ic': constraint})
+
+        self.assertEqual(out['internal_constraint']['upper_limit']['type'], 'CLOSED')
+        self.assertEqual(out['internal_constraint']['scale_constraints'][0]['upper_limit']['type'], 'CLOSED')
+
+
 if __name__ == '__main__':
     unittest.main()
