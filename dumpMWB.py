@@ -639,7 +639,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 # For all COMPU-METHODs, except those of categories IDENTICAL, TEXTTABLE and COMPUCODE, the calculation type (float or integer) is deduced from the type of the internal and physical values
                 # It has a decisive influence on the precision of the calculation
                 output_object['calculation_type'] = None
-                if compu_category not in ['eIDENTICAL', 'eTEXTTABLE']:
+                if compu_category not in ['eIDENTICAL', 'eTEXTTAB']:
                     # In any other case, the calculation is of type A_INT32
                     output_object['calculation_type'] = 'A_INT32'
                     

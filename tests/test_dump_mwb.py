@@ -124,5 +124,37 @@ class ParseDopInternalConstraintTest(unittest.TestCase):
         self.assertEqual(out['internal_constraint']['scale_constraints'][0]['upper_limit']['type'], 'CLOSED')
 
 
+class ParseDopCalculationTypeTest(unittest.TestCase):
+    def test_texttab_has_no_calculation_type(self):
+        scale = {
+            'lower_limit_as_coded_value': {'limit_type': 'eLIMIT_CLOSED', 'mcd_value': make_limit('eA_UINT32', 0)},
+            'upper_limit_as_coded_value': {'limit_type': 'eLIMIT_CLOSED', 'mcd_value': make_limit('eA_UINT32', 0)},
+            'compu_const': make_limit('eA_UNICODE2STRING', 'off'),
+            'long_name_id': None,
+        }
+        dop = make_simple_dop(
+            physical_type={
+                'base_data_type_as_mcd_data_type': 'eA_UNICODE2STRING',
+                'display_radix': 10,
+                'is_precision_available': False,
+                'precision': 0,
+            },
+            compu_method={
+                'compu_category': 'eTEXTTAB',
+                'compu_internal_to_phys': {'compu_scales': [scale], 'compu_default_value': None},
+                'compu_phys_to_internal': None,
+            })
+
+        out = parse_simple_dop(dop)
+
+        self.assertIsNone(out['calculation_type'])
+        self.assertEqual(out['compu_category'], 'TEXTTABLE')
+
+    def test_identical_has_no_calculation_type(self):
+        out = parse_simple_dop(make_simple_dop())
+
+        self.assertIsNone(out['calculation_type'])
+
+
 if __name__ == '__main__':
     unittest.main()
