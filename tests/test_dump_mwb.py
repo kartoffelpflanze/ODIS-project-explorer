@@ -196,6 +196,13 @@ class ParseDopDtcTest(unittest.TestCase):
                 r'^DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not eLEADING_LENGTH_INFO_TYPE$'):
             parse_simple_dop(dop, {'dtc': make_dtc()})
 
+    def test_trouble_code_not_matching_map_key_raises_runtime_error(self):
+        dop = make_dtc_dop(map_key=0x123456)
+
+        with self.assertRaisesRegex(
+                RuntimeError, r'^Trouble code 654321 does not match map key 123456$'):
+            parse_simple_dop(dop, {'dtc': make_dtc(trouble_code=0x654321)})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1324,7 +1324,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
                 
                 # The referenced DTC's trouble code must match the map key
                 if dtc['trouble_code'] != map_item['map_key']:
-                    raise 'Trouble code {:X} does not match map key {:X}'.format(dtc['trouble_code'], map_item['map_key'])
+                    raise RuntimeError('Trouble code {:X} does not match map key {:X}'.format(dtc['trouble_code'], map_item['map_key']))
                 
                 dtc_output_object['label'] = dtc['label']
                 dtc_output_object['short_name'] = dtc['short_name']
