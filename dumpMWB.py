@@ -1274,7 +1274,7 @@ def parse_dop(object_loader, layer_data_objects, project_folder_path, dop):
             physical_type = dop['physical_type']
             compu_method = dop['compu_method']
             if diag_coded_type['type'] != 'eSTANDARD_LENGTH_TYPE':
-                raise RuntimeError('DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not {}').format(diag_coded_type['type'])
+                raise RuntimeError('DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not {}'.format(diag_coded_type['type']))
             if diag_coded_type['bit_length'] != 24:
                 raise RuntimeError('DTC BIT-LENGTH must be 24, not {}'.format(diag_coded_type['bit_length']))
             if diag_coded_type['bit_mask'] != bytearray():

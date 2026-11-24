@@ -156,5 +156,46 @@ class ParseDopCalculationTypeTest(unittest.TestCase):
         self.assertIsNone(out['calculation_type'])
 
 
+def make_dtc_dop(diag_type='eSTANDARD_LENGTH_TYPE', map_key=0x123456):
+    return {
+        '#OBJECT_TYPE': 'DB_DOP_DTC',
+        'short_name': 'DTC_DOP',
+        'long_name': 'DTC DOP',
+        'diag_coded_type': {
+            'type': diag_type,
+            'bit_length': 24,
+            'bit_mask': bytearray(),
+            'encoding': 'eNONE',
+            'is_high_low_byte_order': True,
+            'base_data_type_as_mcd_data_type': 'eA_UINT32',
+        },
+        'physical_type': {'base_data_type_as_mcd_data_type': 'eA_UINT32'},
+        'compu_method': {'compu_category': 'eIDENTICAL'},
+        'diag_trouble_codes_ref_map': [{'reference': 'dtc', 'map_key': map_key}],
+    }
+
+
+def make_dtc(trouble_code=0x123456):
+    return {
+        '#OBJECT_TYPE': 'MCD_DB_DIAG_TROUBLE_CODE',
+        'trouble_code': trouble_code,
+        'label': 'label',
+        'short_name': 'DTC_SHORT',
+        'trouble_code_text': 'P0123',
+        'description': None,
+        'level': 1,
+    }
+
+
+class ParseDopDtcTest(unittest.TestCase):
+    def test_wrong_diag_coded_type_raises_runtime_error(self):
+        dop = make_dtc_dop(diag_type='eLEADING_LENGTH_INFO_TYPE')
+
+        with self.assertRaisesRegex(
+                RuntimeError,
+                r'^DTC DIAG-CODED-TYPE must be STANDARD-LENGTH-TYPE, not eLEADING_LENGTH_INFO_TYPE$'):
+            parse_simple_dop(dop, {'dtc': make_dtc()})
+
+
 if __name__ == '__main__':
     unittest.main()
